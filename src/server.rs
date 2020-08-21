@@ -4,6 +4,7 @@ use std::collections::{HashMap, VecDeque};
 use libc::*;
 use std::time::Duration;
 use std::ffi::CString;
+use std::io;
 
 use crate::client::{Client, ClientState};
 
@@ -54,29 +55,34 @@ impl Server {
 
     pub fn accept(&mut self, poll: &Poll) -> Result<(), failure::Error> {
         /* Wait for a new connection to accept and try to grab a token from the bag. */
-        let (stream, addr) = self.listener.accept()?;
-        let token = self.tokens.pop_front();
+        loop {
+          let (stream, addr) = match self.listener.accept() {
+            Ok((stream, addr)) => (stream, addr),
+            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => break,
+            Err(_e) => return Err(failure::err_msg("Failed to get accept.")),
+          };
 
-        if let Some(token) = token {
-            /* We got a unique token, now let's register the new connection. */
-            println!("Connection received from {}", addr);
-            let mut client = Client::new(stream, token, self.recv, self.acpt, self.disconnect);
-            client.register(poll)?;
-            self.clients.insert(token, client);
-            let cstr = CString::new(addr.to_string()).expect("CString::new failed");
-            let raw = cstr.into_raw();
+          let token = self.tokens.pop_front();
 
-            unsafe {
-                if (self.acpt)(token.0 as u64, raw) < 0 {
-                    return Err(failure::err_msg("Failed to accept user."));
-                }
-            }
-        } else {
-            /* We ran out of tokens, disconnect the new connection. */
-            println!("Reached maximum number of clients, disconnected {}", addr);
-            drop(stream);
-        }
+          if let Some(token) = token {
+              /* We got a unique token, now let's register the new connection. */
+              let mut client = Client::new(stream, token, self.recv, self.acpt, self.disconnect);
+              client.register(poll)?;
+              self.clients.insert(token, client);
+              let cstr = CString::new(addr.to_string()).expect("CString::new failed");
+              let raw = cstr.into_raw();
 
+              unsafe {
+                  if (self.acpt)(token.0 as u64, raw) < 0 {
+                      return Err(failure::err_msg("Failed to accept user."));
+                  }
+                  let _cstr = CString::from_raw(raw);
+              }
+
+          } else {
+              drop(stream);
+          }
+      }
         Ok(())
     }
 

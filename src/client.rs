@@ -120,7 +120,7 @@ impl Client {
         match self.stream.write(&mut buffer) {
           Ok(_) => {},
           Err(e) => {
-            if would_block(&e) {
+            if e.kind() == io::ErrorKind::WouldBlock {
               return;
             } else {
               self.state = ClientState::Closing;
@@ -156,8 +156,4 @@ impl Client {
     pub fn send(&mut self, buf: Vec<u8>) {
         self.sends.insert(0,buf);
     }
-}
-
-fn would_block(err: &io::Error) -> bool {
-    err.kind() == io::ErrorKind::WouldBlock
 }
