@@ -69,7 +69,6 @@ impl Client {
             _ => {
                 self.stream.shutdown(std::net::Shutdown::Both)?;
                 self.state = ClientState::Closed;
-                self.sends.resize_with(0, Default::default);
                 unsafe {
                   (self.disconnect)(self.token.0 as u64);
                 }
@@ -120,7 +119,6 @@ impl Client {
 
         match self.stream.write(&mut buffer) {
           Ok(n) => {
-            buffer.resize(0,0);
             if n == 0 {
               self.state = ClientState::Closing;
               return;
@@ -145,16 +143,16 @@ impl Client {
     }
 
     pub fn register(&mut self, poll: &mio::Poll) -> Result<(), failure::Error> {
-        let interest = self.event_set();
+        let _interest = self.event_set();
         poll.registry()
-            .register(&mut self.stream, self.token, interest)?;
+            .register(&mut self.stream, self.token, Interest::READABLE.add(Interest::WRITABLE))?;
         Ok(())
     }
 
     pub fn reregister(&mut self, poll: &mio::Poll) -> Result<(), failure::Error> {
-        let interest = self.event_set();
+        let _interest = self.event_set();
         poll.registry()
-            .reregister(&mut self.stream, self.token, interest)?;
+            .reregister(&mut self.stream, self.token, Interest::READABLE.add(Interest::WRITABLE))?;
         Ok(())
     }
 

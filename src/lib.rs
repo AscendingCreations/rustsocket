@@ -115,6 +115,8 @@ fn handle_send (cserver: &mut Server, index: u64, data: Vec<u8>) ->Result<(), fa
 pub extern "C" fn socket_set_interest(cpoll: *mut Poll, cserver: *mut Server, index: u64, read: bool) -> c_int {
     unsafe {
 
+    return 0;
+
     if cserver.is_null() || cpoll.is_null() {
       return -1;
     }
