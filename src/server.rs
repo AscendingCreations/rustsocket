@@ -69,7 +69,10 @@ impl Server {
               let mut client = Client::new(stream, token, self.recv, self.acpt, self.disconnect);
               client.register(poll)?;
               self.clients.insert(token, client);
-              let cstr = CString::new(addr.to_string()).expect("CString::new failed");
+              let cstr = match CString::new(addr.to_string()) {
+                Ok(s) => s,
+                Err(_) => return Err(failure::err_msg("Failed to get string.")),
+              };
               let raw = cstr.into_raw();
 
               unsafe {
@@ -110,11 +113,10 @@ pub fn rust_poll_events(cpoll: *mut Poll, cserver: *mut Server) -> Result<(), fa
     unsafe {
     let poll = &mut *cpoll;
     let server = &mut *cserver;
-    //let mut server = &mut *cserver;
 
     let mut events = Events::with_capacity(256);
 
-    poll.poll(&mut events, Some(Duration::from_millis(500)))?;
+    poll.poll(&mut events, Some(Duration::from_millis(100)))?;
 
       for event in events.iter() {
         match event.token() {

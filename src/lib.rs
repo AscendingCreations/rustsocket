@@ -2,7 +2,7 @@
 
 use mio::Poll;
 use libc::*;
-use std::{ptr, slice};
+use std::ptr;
 use std::boxed::Box;
 use std::ffi::CStr;
 use std::os::raw::c_char;
@@ -80,6 +80,13 @@ pub extern "C" fn poll_events(cpoll: *mut Poll, cserver: *mut Server) -> c_int {
     }
 }
 
+unsafe fn from_buf_raw<T>(ptr: *const T, size: usize) -> Vec<T> {
+  let mut dst = Vec::with_capacity(size);
+  dst.set_len(size);
+  ptr::copy(ptr, dst.as_mut_ptr(), size);
+  dst
+}
+
 #[no_mangle]
 pub extern "C" fn socket_send(cserver: *mut Server, index: u64, data: *const c_char, size: u64) -> c_int {
     unsafe {
@@ -87,14 +94,9 @@ pub extern "C" fn socket_send(cserver: *mut Server, index: u64, data: *const c_c
         return -1;
       }
 
-      let bytes = slice::from_raw_parts(data, size as usize);
-      let mut v: Vec<u8> = Vec::new();
+      let bytes = from_buf_raw(data as *const u8, size as usize);
 
-      for i in 0..size as usize {
-        v.push(bytes[i] as u8);
-      }
-
-      match handle_send(&mut *cserver, index, v) {
+      match handle_send(&mut *cserver, index, bytes) {
         Ok(_) => return 0,
         Err(_) => return -1,
       }

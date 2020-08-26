@@ -69,7 +69,7 @@ impl Client {
             _ => {
                 self.stream.shutdown(std::net::Shutdown::Both)?;
                 self.state = ClientState::Closed;
-
+                self.sends.resize_with(0, Default::default);
                 unsafe {
                   (self.disconnect)(self.token.0 as u64);
                 }
@@ -83,13 +83,13 @@ impl Client {
         loop {
           let mut buf: [u8; 2048] = [0; 2048];
             match self.stream.read(&mut buf) {
+                Ok(0) => {
+                    self.state = ClientState::Closing;
+                    return;
+                },
                 Ok(n) => {
-                    if n > 0 {
-                      for i in 0..n {
-                        buffer_list.push(buf[i]);
-                      }
-                    } else {
-                        break;
+                    for i in 0..n {
+                      buffer_list.push(buf[i]);
                     }
                 },
                 Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => break,
@@ -113,20 +113,25 @@ impl Client {
         let mut buffer = match self.sends.pop() {
           Some(buffer) => buffer,
           None => {
+              self.sends.shrink_to_fit();
               return
           }
         };
 
         match self.stream.write(&mut buffer) {
-          Ok(_) => {},
-          Err(e) => {
-            if e.kind() == io::ErrorKind::WouldBlock {
-              return;
-            } else {
+          Ok(n) => {
+            buffer.resize(0,0);
+            if n == 0 {
               self.state = ClientState::Closing;
               return;
             }
-          }
+          },
+          Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => break,
+          Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
+          Err(_) => {
+              self.state = ClientState::Closing;
+              return;
+          },
         }
       }
     }
